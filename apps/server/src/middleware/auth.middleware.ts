@@ -1,8 +1,6 @@
 import { NextFunction, Request, Response } from "express";
 import jwt from "jsonwebtoken";
 
-import { env } from "../config/env";
-
 interface AccessTokenPayload {
   sub: string;
   email: string;
@@ -28,7 +26,7 @@ export function authMiddleware(
   try {
     const payload = jwt.verify(
       accessToken,
-      env.jwtSecret,
+      process.env.JWT_SECRET!,
     ) as AccessTokenPayload;
 
     if (!payload.sub || payload.type !== "access") {

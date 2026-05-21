@@ -12,7 +12,8 @@ function required(name: string, value: string | undefined): string {
 export const env = {
   nodeEnv: process.env.NODE_ENV ?? "development",
   port: Number(process.env.PORT ?? 4000),
-  mongoUri: required("MONGODB_URI", process.env.MONGODB_URI),
+  databaseUrl: required("DATABASE_URL", process.env.DATABASE_URL),
+  directUrl: required("DIRECT_URL", process.env.DIRECT_URL),
   jwtSecret: required("JWT_SECRET", process.env.JWT_SECRET),
   jwtExpiresIn: process.env.JWT_EXPIRES_IN ?? "7d",
   refreshTokenSecret: required(

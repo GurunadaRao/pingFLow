@@ -1,0 +1,139 @@
+version: "3.9"
+
+services:
+  # ─────────────────────────────────────────────────────────────────────
+  # PostgreSQL 16 — Relational metadata (Prisma ORM)
+  # ─────────────────────────────────────────────────────────────────────
+  postgres:
+    image: postgres:16-alpine
+    container_name: vibechat_postgres
+    environment:
+      POSTGRES_USER: vibechat
+      POSTGRES_PASSWORD: vibechat_dev_password
+      POSTGRES_DB: vibechat
+    ports:
+      - "5435:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U vibechat -d vibechat"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - vibechat_network
+
+  # ─────────────────────────────────────────────────────────────────────
+  # MongoDB 7 — Message history (Mongoose)
+  # ─────────────────────────────────────────────────────────────────────
+  mongodb:
+    image: mongo:7
+    container_name: vibechat_mongodb
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: vibechat
+      MONGO_INITDB_ROOT_PASSWORD: vibechat_dev_password
+      MONGO_INITDB_DATABASE: vibechat
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongodb_data:/data/db
+      - ./mongo-init.js:/docker-entrypoint-initdb.d/mongo-init.js:ro
+    healthcheck:
+      test: ["CMD", "mongosh", "--eval", 'db.adminCommand("ping")']
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - vibechat_network
+
+  # ─────────────────────────────────────────────────────────────────────
+  # Redis 7 — Cache, ephemeral state, pub/sub (ioredis)
+  # ─────────────────────────────────────────────────────────────────────
+  redis:
+    image: redis:7-alpine
+    container_name: vibechat_redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    command: redis-server --appendonly yes --appendfilename redis-aof.aof
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - vibechat_network
+
+  # ─────────────────────────────────────────────────────────────────────
+  # Redis Commander (Optional) — Web UI for Redis
+  # Access at http://localhost:8081
+  # ─────────────────────────────────────────────────────────────────────
+  redis-commander:
+    image: rediscommander/redis-commander:latest
+    container_name: vibechat_redis_commander
+    environment:
+      - REDIS_HOSTS=local:redis:6379
+    ports:
+      - "8081:8081"
+    depends_on:
+      - redis
+    networks:
+      - vibechat_network
+
+  # ─────────────────────────────────────────────────────────────────────
+  # Mongo Express (Optional) — Web UI for MongoDB
+  # Access at http://localhost:8082
+  # ─────────────────────────────────────────────────────────────────────
+  mongo-express:
+    image: mongo-express:latest
+    container_name: vibechat_mongo_express
+    environment:
+      ME_CONFIG_MONGODB_ADMINUSERNAME: vibechat
+      ME_CONFIG_MONGODB_ADMINPASSWORD: vibechat_dev_password
+      ME_CONFIG_MONGODB_URL: mongodb://vibechat:vibechat_dev_password@mongodb:27017/
+      ME_CONFIG_BASICAUTH_USERNAME: admin
+      ME_CONFIG_BASICAUTH_PASSWORD: admin_password
+    ports:
+      - "8082:8081"
+    depends_on:
+      - mongodb
+    networks:
+      - vibechat_network
+
+volumes:
+  postgres_data:
+    driver: local
+  mongodb_data:
+    driver: local
+  redis_data:
+    driver: local
+
+networks:
+  vibechat_network:
+    driver: bridge
+
+# ─────────────────────────────────────────────────────────────────────
+# Usage:
+# ─────────────────────────────────────────────────────────────────────
+#
+# Start all services:
+#   docker-compose -f docker-compose.dev.yml up -d
+#
+# Stop all services:
+#   docker-compose -f docker-compose.dev.yml down
+#
+# View logs:
+#   docker-compose -f docker-compose.dev.yml logs -f
+#
+# Access services:
+#   PostgreSQL:      localhost:5432 (user: vibechat, pw: vibechat_dev_password)
+#   MongoDB:         localhost:27017 (user: vibechat, pw: vibechat_dev_password)
+#   Redis:           localhost:6379
+#   Redis Commander: http://localhost:8081
+#   Mongo Express:   http://localhost:8082 (user: admin, pw: admin_password)
+#
+# Then, set in .env.local:
+#   DATABASE_URL=postgresql://vibechat:vibechat_dev_password@localhost:5432/vibechat
+#   MONGODB_URI=mongodb://vibechat:vibechat_dev_password@localhost:27017/vibechat?authSource=admin
+#   REDIS_URL=redis://localhost:6379

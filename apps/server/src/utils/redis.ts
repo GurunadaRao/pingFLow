@@ -8,10 +8,6 @@ let enabled = false;
 if (env.upstashRedisUrl && env.upstashRedisToken) {
   redis = new Redis({ url: env.upstashRedisUrl, token: env.upstashRedisToken });
   enabled = true;
-} else if (env.redisUrl) {
-  // @upstash/redis also accepts a plain redis url without token for compatible providers
-  redis = new Redis({ url: env.redisUrl });
-  enabled = true;
 }
 
 export function isRedisEnabled(): boolean {
