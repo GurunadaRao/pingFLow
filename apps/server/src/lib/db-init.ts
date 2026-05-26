@@ -3,6 +3,7 @@ import pool from "./pg";
 import initRedis from "./redis";
 import initCloudinary from "./cloudinary";
 import connectMongoDB from "./mongoose";
+import { env } from "../config/env";
 
 dotenv.config();
 
@@ -168,11 +169,13 @@ export async function initializeConnections() {
 
   try {
     const redis = initRedis();
-    if (redis && process.env.REDIS_URL) {
+    if (redis) {
       await redis.ping();
-      results.redis = "connected";
+      results.redis = "connected (ioredis)";
+    } else if (env.upstashRedisUrl && env.upstashRedisToken) {
+      results.redis = "configured (Upstash REST API)";
     } else {
-      results.redis = "configured (REST API - awaiting REDIS_URL)";
+      results.redis = "not configured";
     }
   } catch (error) {
     results.redis = `error: ${String(error)}`;

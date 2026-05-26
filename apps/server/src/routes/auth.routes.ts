@@ -2,12 +2,12 @@ import { Router } from "express";
 
 import {
   loginHandler,
+  googleHandler,
   logoutHandler,
   logoutAllDevicesHandler,
   profileHandler,
   refreshTokenHandler,
   registerHandler,
-  verifyEmailHandler,
   forgotPasswordHandler,
   resetPasswordHandler,
 } from "../controllers/auth.controller";
@@ -17,8 +17,9 @@ export const authRouter = Router();
 
 // Public routes
 authRouter.post("/register", registerHandler);
-authRouter.post("/verify-email", verifyEmailHandler);
+/* verify-email route removed */
 authRouter.post("/login", loginHandler);
+authRouter.post("/google", googleHandler);
 authRouter.post("/refresh", refreshTokenHandler);
 authRouter.post("/forgot-password", forgotPasswordHandler);
 authRouter.post("/reset-password", resetPasswordHandler);

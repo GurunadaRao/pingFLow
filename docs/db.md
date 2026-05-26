@@ -1,4 +1,5 @@
 # Polyglot Persistence Schema: Production-Grade Messaging Platform
+
 ### WhatsApp-Inspired Architecture across PostgreSQL · MongoDB · Redis · S3
 
 ---
@@ -25,19 +26,20 @@
 
 ## Design Principles
 
-| Concern | Decision | Rationale |
-|---|---|---|
-| **Write amplification in groups** | Delivery/read receipts stored as per-member sub-documents, not fan-out rows | Avoids N INSERT ops per group message; single atomic MongoDB update |
-| **Hot path latency** | Redis is the first-read layer for all ephemeral state | Avoids cold DB reads for online status, unread counts |
-| **Document growth** | MongoDB Bucket Pattern (50–100 msgs/doc) | Prevents per-message document overhead; amortises index cost |
-| **Media URLs** | S3 keys embedded in MongoDB message payload | Keeps message and media metadata co-located; no JOIN required |
-| **E2EE readiness** | Identity + pre-key tables in PostgreSQL | Signal Protocol pre-key bundle fits naturally in relational ACL tier |
+| Concern                           | Decision                                                                    | Rationale                                                            |
+| --------------------------------- | --------------------------------------------------------------------------- | -------------------------------------------------------------------- |
+| **Write amplification in groups** | Delivery/read receipts stored as per-member sub-documents, not fan-out rows | Avoids N INSERT ops per group message; single atomic MongoDB update  |
+| **Hot path latency**              | Redis is the first-read layer for all ephemeral state                       | Avoids cold DB reads for online status, unread counts                |
+| **Document growth**               | MongoDB Bucket Pattern (50–100 msgs/doc)                                    | Prevents per-message document overhead; amortises index cost         |
+| **Media URLs**                    | S3 keys embedded in MongoDB message payload                                 | Keeps message and media metadata co-located; no JOIN required        |
+| **E2EE readiness**                | Identity + pre-key tables in PostgreSQL                                     | Signal Protocol pre-key bundle fits naturally in relational ACL tier |
 
 ---
 
 ## Tier 1: PostgreSQL — Relational Metadata
 
 ### Design Notes
+
 PostgreSQL owns **identity, access control, and group topology** — the source of truth for anything that requires ACID transactions or complex JOIN queries. Message payloads never land here; only the metadata required to authorise access and render the UI shell.
 
 ---
@@ -300,22 +302,23 @@ CREATE INDEX idx_push_user ON push_tokens (user_id);
 
 ### PostgreSQL: Index Blueprint Summary
 
-| Index | Type | Columns | Purpose |
-|---|---|---|---|
-| `users_pkey` | PK | `id` | Identity lookup |
-| `idx_users_email` | Unique B-Tree | `LOWER(email)` | Login — case-insensitive email match |
-| `idx_users_phone` | Partial B-Tree | `phone_number` | Optional contact discovery |
-| `idx_users_active_status` | Partial B-Tree | `account_status` | Presence / search (active only) |
-| `idx_ev_token` | Partial B-Tree | `token_hash` | Email verification click |
-| `idx_prt_token` | Partial B-Tree | `token_hash` | Password reset validation |
-| `idx_rt_token` | Partial B-Tree | `token_hash` | Refresh token validation |
-| `idx_rt_user` | Partial B-Tree | `user_id` | "Log out all devices" revocation |
-| `idx_cm_user_active` | Partial B-Tree | `user_id, joined_at DESC` | Load user's channel list |
-| `idx_cm_channel` | Partial B-Tree | `channel_id` | Fan-out delivery check |
-| `idx_otpk_user_unclaimed` | Partial B-Tree | `user_id, consumed` | Signal key server pop |
-| `idx_channels_invite_link` | Partial B-Tree | `group_invite_link` | Invite URL resolution |
+| Index                      | Type           | Columns                   | Purpose                              |
+| -------------------------- | -------------- | ------------------------- | ------------------------------------ |
+| `users_pkey`               | PK             | `id`                      | Identity lookup                      |
+| `idx_users_email`          | Unique B-Tree  | `LOWER(email)`            | Login — case-insensitive email match |
+| `idx_users_phone`          | Partial B-Tree | `phone_number`            | Optional contact discovery           |
+| `idx_users_active_status`  | Partial B-Tree | `account_status`          | Presence / search (active only)      |
+| `idx_ev_token`             | Partial B-Tree | `token_hash`              | Email verification click             |
+| `idx_prt_token`            | Partial B-Tree | `token_hash`              | Password reset validation            |
+| `idx_rt_token`             | Partial B-Tree | `token_hash`              | Refresh token validation             |
+| `idx_rt_user`              | Partial B-Tree | `user_id`                 | "Log out all devices" revocation     |
+| `idx_cm_user_active`       | Partial B-Tree | `user_id, joined_at DESC` | Load user's channel list             |
+| `idx_cm_channel`           | Partial B-Tree | `channel_id`              | Fan-out delivery check               |
+| `idx_otpk_user_unclaimed`  | Partial B-Tree | `user_id, consumed`       | Signal key server pop                |
+| `idx_channels_invite_link` | Partial B-Tree | `group_invite_link`       | Invite URL resolution                |
 
 ---
+
 ### Auth Query Logic
 
 #### Registration
@@ -426,15 +429,16 @@ WHERE  user_id    = $1
 
 ---
 
-
 ## Tier 2: MongoDB — Message & Thread History (Bucket Pattern)
 
 ### Design Notes
 
 #### Why the Bucket Pattern?
+
 Each message as its own document means N documents per conversation, high index overhead, and random-access reads. Instead, we **group 50–100 messages into a single bucket document**. A bucket covers a contiguous `sequence_range` within a channel.
 
 **Benefits:**
+
 - One document read = 50–100 messages → optimal for chat history pagination
 - Index lives on bucket boundaries, not individual messages
 - Atomic `$push` into the `messages` array = no separate collection per message
@@ -448,35 +452,37 @@ Each message as its own document means N documents per conversation, high index 
 
 ```javascript
 // models/MessageBucket.js
-import mongoose from 'mongoose';
+import mongoose from "mongoose";
 const { Schema } = mongoose;
 
 // ── Media Attachment Sub-schema ──────────────────────────────────────────
-const MediaAttachmentSchema = new Schema({
+const MediaAttachmentSchema = new Schema(
+  {
     media_type: {
-        type: String,
-        enum: ['image', 'video', 'audio', 'file', 'sticker', 'gif'],
-        required: true
+      type: String,
+      enum: ["image", "video", "audio", "file", "sticker", "gif"],
+      required: true,
     },
-    s3_key:         { type: String, required: true },   // raw S3 object key
-    cdn_url:        { type: String },                   // Cloudfront/CDN URL
-    file_name:      { type: String },
-    file_size_bytes:{ type: Number },
-    mime_type:      { type: String },
+    s3_key: { type: String, required: true }, // raw S3 object key
+    cdn_url: { type: String }, // Cloudfront/CDN URL
+    file_name: { type: String },
+    file_size_bytes: { type: Number },
+    mime_type: { type: String },
 
     // Image / Video specific
-    width_px:       { type: Number },
-    height_px:      { type: Number },
-    duration_secs:  { type: Number },   // audio / video only
+    width_px: { type: Number },
+    height_px: { type: Number },
+    duration_secs: { type: Number }, // audio / video only
 
     // Blurhash for lazy-load placeholder (computed at upload time)
-    blurhash:       { type: String },   // e.g. "LKO2?U%2Tw=w]~RBVZRi};RPxuwH"
+    blurhash: { type: String }, // e.g. "LKO2?U%2Tw=w]~RBVZRi};RPxuwH"
 
     // Thumbnail for videos / large files
     thumbnail_s3_key: { type: String },
-    thumbnail_cdn_url:{ type: String },
-}, { _id: false });
-
+    thumbnail_cdn_url: { type: String },
+  },
+  { _id: false },
+);
 
 // ── Per-member Delivery/Read Receipt Sub-schema ──────────────────────────
 // ARCHITECTURAL DECISION: receipts live inside the message object, NOT as
@@ -485,162 +491,169 @@ const MediaAttachmentSchema = new Schema({
 // ~32 bytes per entry = 8KB max overhead per message.
 // Fan-out write amplification is avoided: one atomic $push per message,
 // one $set to update receipt status.
-const ReceiptSchema = new Schema({
-    user_id:        { type: String, required: true },   // UUID from PostgreSQL
-    delivered_at:   { type: Date },                     // server push confirmed
-    read_at:        { type: Date },                     // blue ticks
-}, { _id: false });
-
+const ReceiptSchema = new Schema(
+  {
+    user_id: { type: String, required: true }, // UUID from PostgreSQL
+    delivered_at: { type: Date }, // server push confirmed
+    read_at: { type: Date }, // blue ticks
+  },
+  { _id: false },
+);
 
 // ── Reaction Sub-schema ──────────────────────────────────────────────────
-const ReactionSchema = new Schema({
-    user_id:    { type: String, required: true },
-    emoji:      { type: String, required: true },   // unicode: "👍", "❤️"
+const ReactionSchema = new Schema(
+  {
+    user_id: { type: String, required: true },
+    emoji: { type: String, required: true }, // unicode: "👍", "❤️"
     reacted_at: { type: Date, default: Date.now },
-}, { _id: false });
-
+  },
+  { _id: false },
+);
 
 // ── Message Sub-schema ───────────────────────────────────────────────────
-const MessageSchema = new Schema({
+const MessageSchema = new Schema(
+  {
     // Globally unique message ID (client-generated UUID for idempotency)
-    _mid:           { type: String, required: true, unique: false },
+    _mid: { type: String, required: true, unique: false },
 
     // Sequence number within the channel (monotonically increasing)
-    seq:            { type: Number, required: true },
+    seq: { type: Number, required: true },
 
-    sender_id:      { type: String, required: true },   // UUID
-    sent_at:        { type: Date,   required: true, default: Date.now },
-    server_at:      { type: Date,   required: true, default: Date.now },  // server receipt time
+    sender_id: { type: String, required: true }, // UUID
+    sent_at: { type: Date, required: true, default: Date.now },
+    server_at: { type: Date, required: true, default: Date.now }, // server receipt time
 
     // Message body
     message_type: {
-        type: String,
-        enum: ['text', 'media', 'system', 'reply', 'forwarded', 'deleted'],
-        default: 'text'
+      type: String,
+      enum: ["text", "media", "system", "reply", "forwarded", "deleted"],
+      default: "text",
     },
-    body:           { type: String, default: '' },  // empty for media-only messages
+    body: { type: String, default: "" }, // empty for media-only messages
 
     // Media (null for text messages)
-    media:          { type: MediaAttachmentSchema, default: null },
+    media: { type: MediaAttachmentSchema, default: null },
 
     // Threaded reply context
     reply_to: {
-        _mid:       { type: String },   // referenced message ID
-        seq:        { type: Number },
-        sender_id:  { type: String },
-        body_preview: { type: String, maxlength: 100 },  // truncated quote
+      _mid: { type: String }, // referenced message ID
+      seq: { type: Number },
+      sender_id: { type: String },
+      body_preview: { type: String, maxlength: 100 }, // truncated quote
     },
 
     // Forward chain
-    forwarded_from_channel_id:  { type: String },
+    forwarded_from_channel_id: { type: String },
 
     // E2EE ciphertext envelope (only present when E2EE is enabled)
     e2ee_envelope: {
-        registration_id:    { type: Number },
-        ephemeral_key:      { type: String },   // base64
-        ciphertext:         { type: String },   // base64
-        message_type:       { type: Number },   // Signal message type (1=whisper, 3=prekey)
+      registration_id: { type: Number },
+      ephemeral_key: { type: String }, // base64
+      ciphertext: { type: String }, // base64
+      message_type: { type: Number }, // Signal message type (1=whisper, 3=prekey)
     },
 
     // Lifecycle state
     status: {
-        type: String,
-        enum: ['sent', 'delivered', 'read', 'failed'],
-        default: 'sent'
+      type: String,
+      enum: ["sent", "delivered", "read", "failed"],
+      default: "sent",
     },
 
     // Per-member receipts array (delivery + read tracking)
-    receipts:   [ReceiptSchema],
+    receipts: [ReceiptSchema],
 
     // Reactions
-    reactions:  [ReactionSchema],
+    reactions: [ReactionSchema],
 
     // Soft-delete (message body nulled out, replaced with tombstone)
     deleted_at: { type: Date, default: null },
     deleted_by: { type: String, default: null },
-
-}, { _id: false });
-
+  },
+  { _id: false },
+);
 
 // ── Bucket Document Schema ───────────────────────────────────────────────
-const MessageBucketSchema = new Schema({
+const MessageBucketSchema = new Schema(
+  {
     // Compound shard key: channel + sequence window
-    channel_id:         { type: String, required: true, index: true },
+    channel_id: { type: String, required: true, index: true },
 
     // Bucket covers messages seq [seq_min, seq_max]
-    seq_min:            { type: Number, required: true },
-    seq_max:            { type: Number, required: true },
+    seq_min: { type: Number, required: true },
+    seq_max: { type: Number, required: true },
 
     // Denormalised message count — gate for bucket fullness (cap = 100)
-    message_count:      { type: Number, required: true, default: 0 },
+    message_count: { type: Number, required: true, default: 0 },
 
     // Timestamp range (for TTL or archival policies)
-    first_message_at:   { type: Date },
-    last_message_at:    { type: Date },
+    first_message_at: { type: Date },
+    last_message_at: { type: Date },
 
     // The messages array (50–100 messages per bucket)
     messages: [MessageSchema],
-
-}, {
-    timestamps: { createdAt: 'created_at', updatedAt: 'updated_at' },
-    collection: 'message_buckets',
-});
-
+  },
+  {
+    timestamps: { createdAt: "created_at", updatedAt: "updated_at" },
+    collection: "message_buckets",
+  },
+);
 
 // ── Indexes ──────────────────────────────────────────────────────────────
 
 // PRIMARY READ PATH: paginate buckets for a channel, newest first
 MessageBucketSchema.index(
-    { channel_id: 1, seq_max: -1 },
-    { name: 'idx_channel_seq_max' }
+  { channel_id: 1, seq_max: -1 },
+  { name: "idx_channel_seq_max" },
 );
 
 // RECEIPT UPDATES: find the bucket containing a specific message by seq
 MessageBucketSchema.index(
-    { channel_id: 1, seq_min: 1, seq_max: 1 },
-    { name: 'idx_channel_seq_range' }
+  { channel_id: 1, seq_min: 1, seq_max: 1 },
+  { name: "idx_channel_seq_range" },
 );
 
 // OPEN BUCKET LOOKUP: find the current open bucket (message_count < 100)
 // Partial index — only indexes documents with unfilled buckets
 MessageBucketSchema.index(
-    { channel_id: 1, message_count: 1 },
-    {
-        name: 'idx_channel_open_bucket',
-        partialFilterExpression: { message_count: { $lt: 100 } }
-    }
+  { channel_id: 1, message_count: 1 },
+  {
+    name: "idx_channel_open_bucket",
+    partialFilterExpression: { message_count: { $lt: 100 } },
+  },
 );
 
 // MEDIA SEARCH: find all media messages in a channel (for the media gallery tab)
 // Sparse — only indexes documents containing at least one media message
 MessageBucketSchema.index(
-    { channel_id: 1, 'messages.sent_at': -1 },
-    {
-        name: 'idx_channel_media',
-        sparse: true,
-        partialFilterExpression: { 'messages.message_type': 'media' }
-    }
+  { channel_id: 1, "messages.sent_at": -1 },
+  {
+    name: "idx_channel_media",
+    sparse: true,
+    partialFilterExpression: { "messages.message_type": "media" },
+  },
 );
 
-export default mongoose.model('MessageBucket', MessageBucketSchema);
+export default mongoose.model("MessageBucket", MessageBucketSchema);
 ```
 
 ---
 
 ### MongoDB: Index Blueprint Summary
 
-| Index Name | Fields | Type | Purpose |
-|---|---|---|---|
-| `idx_channel_seq_max` | `channel_id, seq_max DESC` | Compound | Chat history pagination (cursor-based) |
-| `idx_channel_seq_range` | `channel_id, seq_min, seq_max` | Compound | Locate bucket for receipt updates |
-| `idx_channel_open_bucket` | `channel_id, message_count` | Partial Compound | Fast open-bucket lookup on send |
-| `idx_channel_media` | `channel_id, messages.sent_at DESC` | Sparse Partial | Media gallery tab |
+| Index Name                | Fields                              | Type             | Purpose                                |
+| ------------------------- | ----------------------------------- | ---------------- | -------------------------------------- |
+| `idx_channel_seq_max`     | `channel_id, seq_max DESC`          | Compound         | Chat history pagination (cursor-based) |
+| `idx_channel_seq_range`   | `channel_id, seq_min, seq_max`      | Compound         | Locate bucket for receipt updates      |
+| `idx_channel_open_bucket` | `channel_id, message_count`         | Partial Compound | Fast open-bucket lookup on send        |
+| `idx_channel_media`       | `channel_id, messages.sent_at DESC` | Sparse Partial   | Media gallery tab                      |
 
 ---
 
 ## Tier 3: Redis — Ephemeral & Pub/Sub Volatile Cache
 
 ### Design Notes
+
 Redis owns **everything that changes at socket speed** — states that would cause thundering-herd reads on PostgreSQL if not cached. All keys use a consistent `namespace:entity_id` pattern for scan safety. TTLs are mandatory on all volatile keys.
 
 ---
@@ -821,23 +834,24 @@ end
 
 ### Redis: Key Blueprint Summary
 
-| Key Pattern | Structure | TTL | Purpose |
-|---|---|---|---|
-| `presence:{uid}` | HASH | 30s | Online/offline status |
-| `session:{uid}` | SET | Explicit | All socket IDs per user |
-| `socket:{socket_id}` | HASH | 3600s | Per-socket routing metadata |
-| `unread:{uid}:{cid}` | STRING (counter) | 7d | Unread badge counts |
-| `typing:{cid}` | SORTED SET | Score-based | Active typing indicators |
-| `seq:{cid}` | STRING (counter) | None | Monotonic message sequence |
-| `msg:lock:{cid}` | STRING (NX lock) | 500ms | Distributed write lock |
-| `chat:{cid}` | PubSub Channel | — | Real-time event fan-out |
-| `presence:{uid}` | PubSub Channel | — | Presence broadcast to contacts |
+| Key Pattern          | Structure        | TTL         | Purpose                        |
+| -------------------- | ---------------- | ----------- | ------------------------------ |
+| `presence:{uid}`     | HASH             | 30s         | Online/offline status          |
+| `session:{uid}`      | SET              | Explicit    | All socket IDs per user        |
+| `socket:{socket_id}` | HASH             | 3600s       | Per-socket routing metadata    |
+| `unread:{uid}:{cid}` | STRING (counter) | 7d          | Unread badge counts            |
+| `typing:{cid}`       | SORTED SET       | Score-based | Active typing indicators       |
+| `seq:{cid}`          | STRING (counter) | None        | Monotonic message sequence     |
+| `msg:lock:{cid}`     | STRING (NX lock) | 500ms       | Distributed write lock         |
+| `chat:{cid}`         | PubSub Channel   | —           | Real-time event fan-out        |
+| `presence:{uid}`     | PubSub Channel   | —           | Presence broadcast to contacts |
 
 ---
 
 ## Tier 4: Object Storage (S3 / Cloudinary)
 
 ### Design Notes
+
 Binary media is **never stored in MongoDB**. Only the S3 object key and CDN URL travel in the message payload. This keeps buckets lean and enables independent CDN cache policies per media type.
 
 ---
@@ -857,6 +871,7 @@ media/
 ```
 
 **Example:**
+
 ```
 media/ch_9f4a2b/2025/06/01/msg_7c3d1e/original.jpg
 media/ch_9f4a2b/2025/06/01/msg_7c3d1e/thumbnail_360w.webp
@@ -934,98 +949,104 @@ This is the **write hot path**. Sequence:
 
 ```javascript
 // services/messageService.js (critical path)
-import MessageBucket from '../models/MessageBucket.js';
-import redis from '../lib/redis.js';
-import { acquireLock, releaseLock } from '../lib/locks.js';
+import MessageBucket from "../models/MessageBucket.js";
+import redis from "../lib/redis.js";
+import { acquireLock, releaseLock } from "../lib/locks.js";
 
-export async function sendMessage({ channelId, senderId, body, media, replyTo, clientMid }) {
-    const lockKey = `msg:lock:${channelId}`;
-    const lockId  = `${process.env.SERVER_ID}:${Date.now()}`;
+export async function sendMessage({
+  channelId,
+  senderId,
+  body,
+  media,
+  replyTo,
+  clientMid,
+}) {
+  const lockKey = `msg:lock:${channelId}`;
+  const lockId = `${process.env.SERVER_ID}:${Date.now()}`;
 
-    // Step 1: Acquire distributed lock
-    const locked = await redis.set(lockKey, lockId, 'NX', 'PX', 500);
-    if (!locked) throw new Error('LOCK_CONTENTION'); // caller should retry
+  // Step 1: Acquire distributed lock
+  const locked = await redis.set(lockKey, lockId, "NX", "PX", 500);
+  if (!locked) throw new Error("LOCK_CONTENTION"); // caller should retry
 
-    try {
-        // Step 2: Assign monotonic sequence number
-        const seq = await redis.incr(`seq:${channelId}`);
+  try {
+    // Step 2: Assign monotonic sequence number
+    const seq = await redis.incr(`seq:${channelId}`);
 
-        const now = new Date();
-        const newMessage = {
-            _mid:         clientMid,
-            seq,
-            sender_id:    senderId,
-            sent_at:      now,
-            server_at:    now,
-            message_type: media ? 'media' : 'text',
-            body:         body ?? '',
-            media:        media ?? null,
-            reply_to:     replyTo ?? null,
-            status:       'sent',
-            receipts:     [],   // populated as delivery confirmations arrive
-            reactions:    [],
-        };
+    const now = new Date();
+    const newMessage = {
+      _mid: clientMid,
+      seq,
+      sender_id: senderId,
+      sent_at: now,
+      server_at: now,
+      message_type: media ? "media" : "text",
+      body: body ?? "",
+      media: media ?? null,
+      reply_to: replyTo ?? null,
+      status: "sent",
+      receipts: [], // populated as delivery confirmations arrive
+      reactions: [],
+    };
 
-        // Step 3: Atomic upsert into open bucket (MongoDB)
-        // findOneAndUpdate with upsert:
-        //   - If open bucket exists (count < 100) → $push message, $inc count
-        //   - If no open bucket → create a new bucket document
-        const result = await MessageBucket.findOneAndUpdate(
-            {
-                channel_id:    channelId,
-                message_count: { $lt: 100 },   // open bucket gate
-            },
-            {
-                $push: { messages: newMessage },
-                $inc:  { message_count: 1 },
-                $min:  { seq_min: seq },
-                $max:  { seq_max: seq },
-                $set:  {
-                    last_message_at: now,
-                    $setOnInsert: { first_message_at: now }
-                },
-                $setOnInsert: {
-                    channel_id: channelId,
-                    seq_min:    seq,
-                    message_count: 1,
-                },
-            },
-            {
-                upsert: true,
-                new: true,
-                sort: { seq_max: -1 }, // target the newest open bucket
-            }
-        );
+    // Step 3: Atomic upsert into open bucket (MongoDB)
+    // findOneAndUpdate with upsert:
+    //   - If open bucket exists (count < 100) → $push message, $inc count
+    //   - If no open bucket → create a new bucket document
+    const result = await MessageBucket.findOneAndUpdate(
+      {
+        channel_id: channelId,
+        message_count: { $lt: 100 }, // open bucket gate
+      },
+      {
+        $push: { messages: newMessage },
+        $inc: { message_count: 1 },
+        $min: { seq_min: seq },
+        $max: { seq_max: seq },
+        $set: {
+          last_message_at: now,
+          $setOnInsert: { first_message_at: now },
+        },
+        $setOnInsert: {
+          channel_id: channelId,
+          seq_min: seq,
+          message_count: 1,
+        },
+      },
+      {
+        upsert: true,
+        new: true,
+        sort: { seq_max: -1 }, // target the newest open bucket
+      },
+    );
 
-        // Step 4: Fan-out unread increments to all channel members
-        // (member list read from Redis cache or PostgreSQL)
-        const memberIds = await getChannelMemberIds(channelId); // returns string[]
+    // Step 4: Fan-out unread increments to all channel members
+    // (member list read from Redis cache or PostgreSQL)
+    const memberIds = await getChannelMemberIds(channelId); // returns string[]
 
-        const pipeline = redis.pipeline();
-        for (const memberId of memberIds) {
-            if (memberId === senderId) continue; // sender doesn't get unread
-            pipeline.incr(`unread:${memberId}:${channelId}`);
-            pipeline.expire(`unread:${memberId}:${channelId}`, 604800);
-        }
-
-        // Step 5: Publish to all servers via Redis Pub/Sub
-        const event = JSON.stringify({
-            event:      'new_message',
-            channel_id: channelId,
-            _mid:       clientMid,
-            seq,
-            sender_id:  senderId,
-            server_at:  now.toISOString(),
-        });
-        pipeline.publish(`chat:${channelId}`, event);
-
-        await pipeline.exec();
-
-        return { _mid: clientMid, seq, server_at: now };
-
-    } finally {
-        await releaseLock(lockKey, lockId);  // Lua atomic release
+    const pipeline = redis.pipeline();
+    for (const memberId of memberIds) {
+      if (memberId === senderId) continue; // sender doesn't get unread
+      pipeline.incr(`unread:${memberId}:${channelId}`);
+      pipeline.expire(`unread:${memberId}:${channelId}`, 604800);
     }
+
+    // Step 5: Publish to all servers via Redis Pub/Sub
+    const event = JSON.stringify({
+      event: "new_message",
+      channel_id: channelId,
+      _mid: clientMid,
+      seq,
+      sender_id: senderId,
+      server_at: now.toISOString(),
+    });
+    pipeline.publish(`chat:${channelId}`, event);
+
+    await pipeline.exec();
+
+    return { _mid: clientMid, seq, server_at: now };
+  } finally {
+    await releaseLock(lockKey, lockId); // Lua atomic release
+  }
 }
 ```
 
@@ -1047,43 +1068,43 @@ Cursor is the seq value — stable across bucket boundaries, monotonic.
 ```javascript
 // services/historyService.js
 export async function fetchChatHistory({ channelId, beforeSeq, limit = 50 }) {
-    // We may need messages spanning multiple buckets.
-    // Fetch enough buckets to fill the limit (each bucket has up to 100 messages).
-    // Worst case: limit=50 at a bucket boundary → 2 buckets.
+  // We may need messages spanning multiple buckets.
+  // Fetch enough buckets to fill the limit (each bucket has up to 100 messages).
+  // Worst case: limit=50 at a bucket boundary → 2 buckets.
 
-    const buckets = await MessageBucket.find(
-        {
-            channel_id: channelId,
-            seq_max: { $lt: beforeSeq },     // cursor: buckets BEFORE the current position
-        },
-        {
-            // Projection: exclude internal fields, include messages array
-            messages: 1,
-            seq_min:  1,
-            seq_max:  1,
-        }
-    )
-    .sort({ seq_max: -1 })                   // newest buckets first
-    .limit(Math.ceil(limit / 50) + 1)        // over-fetch by 1 bucket for cursor detection
+  const buckets = await MessageBucket.find(
+    {
+      channel_id: channelId,
+      seq_max: { $lt: beforeSeq }, // cursor: buckets BEFORE the current position
+    },
+    {
+      // Projection: exclude internal fields, include messages array
+      messages: 1,
+      seq_min: 1,
+      seq_max: 1,
+    },
+  )
+    .sort({ seq_max: -1 }) // newest buckets first
+    .limit(Math.ceil(limit / 50) + 1) // over-fetch by 1 bucket for cursor detection
     .lean();
 
-    // Flatten all messages from all fetched buckets into a single array
-    const allMessages = buckets
-        .flatMap(b => b.messages)
-        .filter(m => m.seq < beforeSeq)
-        .sort((a, b) => b.seq - a.seq);     // newest first
+  // Flatten all messages from all fetched buckets into a single array
+  const allMessages = buckets
+    .flatMap((b) => b.messages)
+    .filter((m) => m.seq < beforeSeq)
+    .sort((a, b) => b.seq - a.seq); // newest first
 
-    const messages = allMessages.slice(0, limit);
+  const messages = allMessages.slice(0, limit);
 
-    // Compute the next cursor for the client
-    const hasMore        = allMessages.length > limit;
-    const nextCursor     = hasMore ? messages[messages.length - 1].seq : null;
+  // Compute the next cursor for the client
+  const hasMore = allMessages.length > limit;
+  const nextCursor = hasMore ? messages[messages.length - 1].seq : null;
 
-    return {
-        messages,
-        next_cursor: nextCursor,
-        has_more:    hasMore,
-    };
+  return {
+    messages,
+    next_cursor: nextCursor,
+    has_more: hasMore,
+  };
 }
 
 // Example response shape:
@@ -1101,40 +1122,43 @@ export async function fetchChatHistory({ channelId, beforeSeq, limit = 50 }) {
 ```javascript
 // When user B reads a message, update the receipt in the bucket
 export async function markAsRead({ channelId, readerId, upToSeq }) {
-    const readAt = new Date();
+  const readAt = new Date();
 
-    // Update all buckets containing messages ≤ upToSeq for this channel
-    await MessageBucket.updateMany(
-        {
-            channel_id: channelId,
-            seq_min: { $lte: upToSeq },
-            'messages.receipts.user_id': readerId,
-        },
-        {
-            $set: {
-                'messages.$[msg].receipts.$[receipt].read_at': readAt,
-                'messages.$[msg].status': 'read',
-            }
-        },
-        {
-            arrayFilters: [
-                { 'msg.seq': { $lte: upToSeq } },
-                { 'receipt.user_id': readerId, 'receipt.read_at': null },
-            ]
-        }
-    );
+  // Update all buckets containing messages ≤ upToSeq for this channel
+  await MessageBucket.updateMany(
+    {
+      channel_id: channelId,
+      seq_min: { $lte: upToSeq },
+      "messages.receipts.user_id": readerId,
+    },
+    {
+      $set: {
+        "messages.$[msg].receipts.$[receipt].read_at": readAt,
+        "messages.$[msg].status": "read",
+      },
+    },
+    {
+      arrayFilters: [
+        { "msg.seq": { $lte: upToSeq } },
+        { "receipt.user_id": readerId, "receipt.read_at": null },
+      ],
+    },
+  );
 
-    // Reset unread counter in Redis
-    await redis.set(`unread:${readerId}:${channelId}`, 0, 'KEEPTTL');
+  // Reset unread counter in Redis
+  await redis.set(`unread:${readerId}:${channelId}`, 0, "KEEPTTL");
 
-    // Publish read receipt event so sender gets blue ticks
-    await redis.publish(`chat:${channelId}`, JSON.stringify({
-        event:      'read_receipt',
-        channel_id: channelId,
-        reader_id:  readerId,
-        up_to_seq:  upToSeq,
-        read_at:    readAt.toISOString(),
-    }));
+  // Publish read receipt event so sender gets blue ticks
+  await redis.publish(
+    `chat:${channelId}`,
+    JSON.stringify({
+      event: "read_receipt",
+      channel_id: channelId,
+      reader_id: readerId,
+      up_to_seq: upToSeq,
+      read_at: readAt.toISOString(),
+    }),
+  );
 }
 ```
 
@@ -1143,6 +1167,7 @@ export async function markAsRead({ channelId, readerId, upToSeq }) {
 ## Scalability Notes
 
 ### Group Message Delivery at Scale (No Write Amplification)
+
 WhatsApp groups (up to 1024 members) use **server-side fan-out via Redis Pub/Sub**, not per-member rows:
 
 ```
@@ -1154,31 +1179,35 @@ PUBLISH chat:{channel_id} → all socket servers subscribed to this channel
 The MongoDB bucket gets **one write** per message regardless of group size. Member delivery receipts are accumulated **in the message's `receipts` array** with `$push` operations as acknowledgements arrive asynchronously — they do not block the send path.
 
 ### Sequence Number Cold Start
+
 On server startup, seed Redis from MongoDB:
 
 ```javascript
 async function seedSequenceCounter(channelId) {
-    const latest = await MessageBucket.findOne(
-        { channel_id: channelId },
-        { seq_max: 1 }
-    ).sort({ seq_max: -1 }).lean();
+  const latest = await MessageBucket.findOne(
+    { channel_id: channelId },
+    { seq_max: 1 },
+  )
+    .sort({ seq_max: -1 })
+    .lean();
 
-    const lastSeq = latest?.seq_max ?? 0;
-    await redis.set(`seq:${channelId}`, lastSeq, 'NX'); // NX: don't overwrite existing
+  const lastSeq = latest?.seq_max ?? 0;
+  await redis.set(`seq:${channelId}`, lastSeq, "NX"); // NX: don't overwrite existing
 }
 ```
 
 ### Delivery Status Aggregation for Groups
+
 The group message `status` field derives from the **minimum receipt state** across all members:
 
 ```javascript
 function aggregateGroupStatus(receipts, memberCount) {
-    const delivered = receipts.filter(r => r.delivered_at).length;
-    const read      = receipts.filter(r => r.read_at).length;
+  const delivered = receipts.filter((r) => r.delivered_at).length;
+  const read = receipts.filter((r) => r.read_at).length;
 
-    if (read === memberCount)       return 'read';       // all blue ticks
-    if (delivered === memberCount)  return 'delivered';  // all double ticks
-    return 'sent';                                       // single tick
+  if (read === memberCount) return "read"; // all blue ticks
+  if (delivered === memberCount) return "delivered"; // all double ticks
+  return "sent"; // single tick
 }
 ```
 
@@ -1188,15 +1217,15 @@ This is computed at **read time**, not stored — avoids O(N) update writes on e
 
 ## Technology Stack Summary
 
-| Layer | Technology | Client Library |
-|---|---|---|
-| Relational Metadata | PostgreSQL 16 | `pg` / Prisma ORM |
-| Message History | MongoDB 7 (Atlas) | Mongoose 8 |
-| Cache & Pub/Sub | Redis 7 (Upstash / self-hosted) | `ioredis` |
-| Object Storage | AWS S3 / Cloudflare R2 | `@aws-sdk/client-s3` |
-| Real-Time Transport | Socket.IO / ws | `socket.io` |
-| Media Processing | Sharp (images), FFmpeg (video/audio) | `sharp`, `fluent-ffmpeg` |
+| Layer               | Technology                           | Client Library           |
+| ------------------- | ------------------------------------ | ------------------------ |
+| Relational Metadata | PostgreSQL 16                        | `pg` / Prisma ORM        |
+| Message History     | MongoDB 7 (Atlas)                    | Mongoose 8               |
+| Cache & Pub/Sub     | Redis 7 (Upstash / self-hosted)      | `ioredis`                |
+| Object Storage      | AWS S3 / Cloudflare R2               | `@aws-sdk/client-s3`     |
+| Real-Time Transport | Socket.IO / ws                       | `socket.io`              |
+| Media Processing    | Sharp (images), FFmpeg (video/audio) | `sharp`, `fluent-ffmpeg` |
 
 ---
 
-*Schema Version: 1.0 — Gurunada Suvidha Platform Reference Architecture*
+_Schema Version: 1.0 — Gurunada Suvidha Platform Reference Architecture_

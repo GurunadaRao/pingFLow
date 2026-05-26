@@ -1,0 +1,44 @@
+[
+  {
+    "email": "test1+1779699722834@example.com",
+    "password": "Password123!",
+    "displayName": "Test User One",
+    "auth": {
+      "user": {
+        "id": "6176e039-9924-4e52-bed9-e30887724994",
+        "email": "test1+1779699722834@example.com",
+        "display_name": "Test User One",
+        "avatar_s3_key": null,
+        "about_text": null,
+        "account_status": "active",
+        "email_verified": true,
+        "created_at": "2026-05-25T09:02:04.795Z",
+        "updated_at": "2026-05-25T09:02:04.795Z"
+      },
+      "accessToken": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiI2MTc2ZTAzOS05OTI0LTRlNTItYmVkOS1lMzA4ODc3MjQ5OTQiLCJlbWFpbCI6InRlc3QxKzE3Nzk2OTk3MjI4MzRAZXhhbXBsZS5jb20iLCJ0eXBlIjoiYWNjZXNzIiwiaWF0IjoxNzc5Njk5NzI0LCJleHAiOjE3Nzk3MDA2MjR9.pWsH8AmBvOlR3FgbxX44IvWosboYhGGln2hkWEKDROw",
+      "refreshToken": "4e78ff532d02f9422d824b9e02cdf7c36cab6e43a875057b812962e4a7e00409",
+      "refreshTokenId": "f9933a32-785f-4419-b2fd-25e6de2c282c"
+    }
+  },
+  {
+    "email": "test2+1779699722834@example.com",
+    "password": "Password123!",
+    "displayName": "Test User Two",
+    "auth": {
+      "user": {
+        "id": "a3cdb0a9-1752-4181-b85b-d419e6254ef2",
+        "email": "test2+1779699722834@example.com",
+        "display_name": "Test User Two",
+        "avatar_s3_key": null,
+        "about_text": null,
+        "account_status": "active",
+        "email_verified": true,
+        "created_at": "2026-05-25T09:02:05.936Z",
+        "updated_at": "2026-05-25T09:02:05.936Z"
+      },
+      "accessToken": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJhM2NkYjBhOS0xNzUyLTQxODEtYjg1Yi1kNDE5ZTYyNTRlZjIiLCJlbWFpbCI6InRlc3QyKzE3Nzk2OTk3MjI4MzRAZXhhbXBsZS5jb20iLCJ0eXBlIjoiYWNjZXNzIiwiaWF0IjoxNzc5Njk5NzI2LCJleHAiOjE3Nzk3MDA2MjZ9.cT9nlPRYWwkDNQkvVmzpRF-kxA-nktY9xub2XYVB1Bs",
+      "refreshToken": "0741fe0d058dcba32d6809d067a46e080e98d01d3e8b20b9cdc22a0f53b2a97e",
+      "refreshTokenId": "d3f32efa-5d1f-40c4-a194-30a8fbdc1c57"
+    }
+  }
+]

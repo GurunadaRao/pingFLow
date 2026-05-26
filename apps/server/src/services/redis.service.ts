@@ -1,13 +1,14 @@
 import { getRedis } from "../lib/redis";
 import { Redis as UpstashRedis } from "@upstash/redis";
+import { env } from "../config/env";
 
 // Robust unified fallback client support
 let upstashClient: UpstashRedis | null = null;
 
 function getUpstashClient(): UpstashRedis | null {
   if (upstashClient) return upstashClient;
-  const url = process.env.UPSTASH_REDIS_REST_URL;
-  const token = process.env.UPSTASH_REDIS_REST_TOKEN;
+  const url = env.upstashRedisUrl;
+  const token = env.upstashRedisToken;
   if (url && token) {
     try {
       upstashClient = new UpstashRedis({ url, token });
@@ -125,17 +126,26 @@ export class RedisService {
 
     const ioredis = getRedis();
     if (ioredis) {
+      console.log(
+        `🔧 startTyping: using ioredis, key=${key}, member=${member}, score=${score}`,
+      );
       await ioredis.zadd(key, score, member);
       return;
     }
 
     const upstash = getUpstashClient();
     if (upstash) {
+      console.log(
+        `🔧 startTyping: using upstash, key=${key}, member=${member}, score=${score}`,
+      );
       await upstash.zadd(key, { score, member });
       return;
     }
 
     // In-memory fallback
+    console.log(
+      `🔧 startTyping: using in-memory fallback, key=${key}, member=${member}, score=${score}`,
+    );
     if (!inMemoryTyping.has(channelId)) {
       inMemoryTyping.set(channelId, new Map());
     }
@@ -175,19 +185,24 @@ export class RedisService {
     const ioredis = getRedis();
 
     if (ioredis) {
+      console.log(`🔧 getTypingUsers: using ioredis, key=${key}`);
       await ioredis.zremrangebyscore(key, 0, now);
       const members = await ioredis.zrange(key, 0, -1);
+      console.log(`🔧 getTypingUsers: ioredis members=`, members);
       return members.map((m) => m.split(":")[1]); // Extract displayNames
     }
 
     const upstash = getUpstashClient();
     if (upstash) {
+      console.log(`🔧 getTypingUsers: using upstash, key=${key}`);
       await upstash.zremrangebyscore(key, 0, now);
       const members = await upstash.zrange<string[]>(key, 0, -1);
+      console.log(`🔧 getTypingUsers: upstash members=`, members);
       return members.map((m) => m.split(":")[1]);
     }
 
     // In-memory fallback
+    console.log(`🔧 getTypingUsers: using in-memory fallback, key=${key}`);
     const map = inMemoryTyping.get(channelId);
     if (!map) return [];
     const typingList: string[] = [];
@@ -198,6 +213,7 @@ export class RedisService {
         map.delete(member);
       }
     }
+    console.log(`🔧 getTypingUsers: in-memory list=`, typingList);
     return typingList;
   }
 
@@ -299,6 +315,29 @@ export class RedisService {
   ): Promise<void> {
     const channel = `chat:${channelId}`;
     const payload = JSON.stringify(eventPayload);
+    const shouldUseLocalSocketBroadcast = env.nodeEnv === "development";
+
+    if (shouldUseLocalSocketBroadcast) {
+      try {
+        const { getIO } = require("../lib/socket");
+        const io = getIO();
+        if (io) {
+          const parsed =
+            typeof eventPayload === "string"
+              ? JSON.parse(eventPayload)
+              : eventPayload;
+          if (parsed && (parsed as any).event) {
+            console.log(
+              `📡 [Dev Local] Broadcasting event ${(parsed as any).event} to chat:${channelId}`,
+            );
+            io.to(`chat:${channelId}`).emit((parsed as any).event, parsed);
+            return;
+          }
+        }
+      } catch (_error) {
+        // fall through to Redis/Upstash publishing when local socket broadcast is unavailable
+      }
+    }
 
     const ioredis = getRedis();
     if (ioredis) {
@@ -317,9 +356,14 @@ export class RedisService {
       const { getIO } = require("../lib/socket");
       const io = getIO();
       if (io) {
-        const parsed = typeof eventPayload === "string" ? JSON.parse(eventPayload) : eventPayload;
+        const parsed =
+          typeof eventPayload === "string"
+            ? JSON.parse(eventPayload)
+            : eventPayload;
         if (parsed && (parsed as any).event) {
-          console.log(`📡 [Local Fallback] Broadcasting event ${(parsed as any).event} to chat:${channelId}`);
+          console.log(
+            `📡 [Local Fallback] Broadcasting event ${(parsed as any).event} to chat:${channelId}`,
+          );
           io.to(`chat:${channelId}`).emit((parsed as any).event, parsed);
         }
       }

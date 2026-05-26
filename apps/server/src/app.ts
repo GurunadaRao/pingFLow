@@ -3,16 +3,28 @@ import cors from "cors";
 
 import pool from "./lib/pg";
 import { getRedis } from "./lib/redis";
+import { env } from "./config/env";
 import mongoose from "mongoose";
 import { authRouter } from "./routes/auth.routes";
 import { channelRouter } from "./routes/channel.routes";
-import { env } from "./config/env";
 
 export function createApp() {
   const app = express();
 
-  // enable CORS for browser clients; allow credentials and reflect origin
-  app.use(cors({ origin: true, credentials: true }));
+  // enable CORS for localhost development
+  app.use(
+    cors({
+      origin: [
+        "http://localhost:3000",
+        "http://localhost:5173",
+        "http://localhost:5174",
+        "http://127.0.0.1:3000",
+        "http://127.0.0.1:5173",
+        "http://127.0.0.1:5174",
+      ],
+      credentials: true,
+    }),
+  );
 
   app.use(express.json());
 
@@ -33,7 +45,8 @@ export function createApp() {
 
     try {
       const mongoState = mongoose.connection.readyState;
-      healthStatus.mongodb = mongoState === 1 ? "connected" : `state: ${mongoState}`;
+      healthStatus.mongodb =
+        mongoState === 1 ? "connected" : `state: ${mongoState}`;
     } catch (err) {
       healthStatus.status = "unhealthy";
       healthStatus.mongodb = `error: ${String(err)}`;
@@ -42,16 +55,24 @@ export function createApp() {
     try {
       const redis = getRedis();
       if (redis) {
-        healthStatus.redis = redis.status === "ready" || redis.status === "connect" ? "connected" : redis.status;
+        healthStatus.redis =
+          redis.status === "ready" || redis.status === "connect"
+            ? "connected"
+            : redis.status;
       } else {
-        healthStatus.redis = process.env.UPSTASH_REDIS_REST_URL ? "connected (Upstash REST)" : "not configured";
+        healthStatus.redis =
+          env.upstashRedisUrl && env.upstashRedisToken
+            ? "connected (Upstash REST)"
+            : "not configured";
       }
     } catch (err) {
       healthStatus.status = "unhealthy";
       healthStatus.redis = `error: ${String(err)}`;
     }
 
-    res.status(healthStatus.status === "healthy" ? 200 : 500).json(healthStatus);
+    res
+      .status(healthStatus.status === "healthy" ? 200 : 500)
+      .json(healthStatus);
   });
 
   // mount versioned API routes under /api/:version

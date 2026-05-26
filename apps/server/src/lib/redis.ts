@@ -1,5 +1,6 @@
 import Redis from "ioredis";
 import dotenv from "dotenv";
+import { env } from "../config/env";
 
 dotenv.config();
 
@@ -11,54 +12,36 @@ function initRedis(): Redis | null {
     return redis;
   }
 
-  try {
-    // Try REDIS_URL first (standard format)
-    const redisUrl = process.env.REDIS_URL;
-
-    if (redisUrl) {
-      console.log("🔗 Connecting to Redis via REDIS_URL...");
-      redis = new Redis(redisUrl, {
-        retryStrategy: (times) => {
-          const delay = Math.min(times * 50, 2000);
-          return delay;
-        },
-        maxRetriesPerRequest: null,
-      });
-
-      redis.on("connect", () => {
-        console.log("✅ Redis connected");
-      });
-
-      redis.on("error", (error) => {
-        console.error("❌ Redis error:", error);
-      });
-
-      redis.on("close", () => {
-        console.warn("⚠️  Redis connection closed");
-      });
-    } else {
-      // Fallback: Use Upstash REST API through HTTP
-      console.log("⚠️  REDIS_URL not found. Using Upstash REST API...");
-      const upstashUrl = process.env.UPSTASH_REDIS_REST_URL;
-      const upstashToken = process.env.UPSTASH_REDIS_REST_TOKEN;
-
-      if (!upstashUrl || !upstashToken) {
-        throw new Error("REDIS_URL or UPSTASH credentials not defined in .env");
-      }
-
-      // Note: For Phase 3, we're documenting the REST API approach
-      // For full ioredis support, obtain REDIS_URL from Upstash Console
-      console.log(
-        "📝 Phase 3: For full Redis support, get REDIS_URL from Upstash Console",
-      );
-      console.log("   URL Format: redis://default:password@host:port");
+  // Prefer REDIS_URL (Docker) if provided
+  const redisUrl = env.redisUrl;
+  if (redisUrl) {
+    try {
+      console.log(`⚡️ Connecting to Redis at ${redisUrl}`);
+      redis = new Redis(redisUrl);
+      console.log("✅ Redis connection established via REDIS_URL");
+      return redis;
+    } catch (err) {
+      console.error("❌ Failed to connect to Redis via REDIS_URL:", err);
+      // fall through to Upstash or null
     }
-
-    return redis;
-  } catch (error) {
-    console.error("❌ Failed to initialize Redis:", error);
-    throw error;
   }
+
+  // Fallback to Upstash REST API (no ioredis support)
+  console.log("⚠️  Using Upstash REST API via environment variables...");
+  const upstashUrl = env.upstashRedisUrl;
+  const upstashToken = env.upstashRedisToken;
+
+  if (!upstashUrl || !upstashToken) {
+    console.warn(
+      "⚠️  Upstash Redis credentials not configured. Set UPSTASH_REDIS_REST_URL and UPSTASH_REDIS_REST_TOKEN in .env",
+    );
+    return null;
+  }
+
+  // Note: ioredis bridge for Upstash is not available in this setup
+  // Services should use @upstash/redis directly for REST API access
+  console.log("📝 Upstash REST credentials loaded from environment");
+  return null;
 }
 
 export const getRedis = (): Redis | null => {

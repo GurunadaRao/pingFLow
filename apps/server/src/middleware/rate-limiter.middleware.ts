@@ -1,18 +1,22 @@
 import { Request, Response, NextFunction } from "express";
 import { getRedis } from "../lib/redis";
 import { Redis as UpstashRedis } from "@upstash/redis";
+import { env } from "../config/env";
 
 let upstashClient: UpstashRedis | null = null;
 function getUpstashClient(): UpstashRedis | null {
   if (upstashClient) return upstashClient;
-  const url = process.env.UPSTASH_REDIS_REST_URL;
-  const token = process.env.UPSTASH_REDIS_REST_TOKEN;
+  const url = env.upstashRedisUrl;
+  const token = env.upstashRedisToken;
   if (url && token) {
     try {
       upstashClient = new UpstashRedis({ url, token });
       return upstashClient;
     } catch (e) {
-      console.error("❌ Failed to initialize Upstash REST Client in Rate Limiter:", e);
+      console.error(
+        "❌ Failed to initialize Upstash REST Client in Rate Limiter:",
+        e,
+      );
     }
   }
   return null;
@@ -46,7 +50,10 @@ export function createRateLimiter(options: {
         if (results) {
           const count = results[2] ? (results[2][1] as number) : 0;
           res.setHeader("X-RateLimit-Limit", options.max.toString());
-          res.setHeader("X-RateLimit-Remaining", Math.max(0, options.max - count).toString());
+          res.setHeader(
+            "X-RateLimit-Remaining",
+            Math.max(0, options.max - count).toString(),
+          );
 
           if (count > options.max) {
             return res.status(429).json({
@@ -69,7 +76,10 @@ export function createRateLimiter(options: {
         if (results) {
           const count = results[2] as number;
           res.setHeader("X-RateLimit-Limit", options.max.toString());
-          res.setHeader("X-RateLimit-Remaining", Math.max(0, options.max - count).toString());
+          res.setHeader(
+            "X-RateLimit-Remaining",
+            Math.max(0, options.max - count).toString(),
+          );
 
           if (count > options.max) {
             return res.status(429).json({

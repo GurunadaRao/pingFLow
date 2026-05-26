@@ -1,5 +1,6 @@
 import { getRedis } from "../lib/redis";
 import { Redis as UpstashRedis } from "@upstash/redis";
+import { env } from "../config/env";
 import { MessageBucket } from "../models/message-bucket.model";
 import crypto from "crypto";
 
@@ -7,8 +8,8 @@ import crypto from "crypto";
 let upstashClient: UpstashRedis | null = null;
 function getUpstashClient(): UpstashRedis | null {
   if (upstashClient) return upstashClient;
-  const url = process.env.UPSTASH_REDIS_REST_URL;
-  const token = process.env.UPSTASH_REDIS_REST_TOKEN;
+  const url = env.upstashRedisUrl;
+  const token = env.upstashRedisToken;
   if (url && token) {
     try {
       upstashClient = new UpstashRedis({ url, token });

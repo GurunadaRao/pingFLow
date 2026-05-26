@@ -2,7 +2,6 @@ import { Request, Response } from "express";
 
 import {
   registerUser,
-  verifyEmail,
   loginUser,
   refreshAccessToken,
   revokeRefreshToken,
@@ -10,6 +9,7 @@ import {
   requestPasswordReset,
   resetPassword,
   getUserById,
+  googleSignIn,
 } from "../services/auth.service";
 
 function handleAuthError(error: unknown, res: Response): Response {
@@ -40,25 +40,7 @@ export async function registerHandler(
   }
 }
 
-export async function verifyEmailHandler(
-  req: Request,
-  res: Response,
-): Promise<Response> {
-  try {
-    const { token } = req.body;
-
-    if (!token) {
-      return res.status(400).json({ error: "Verification token is required" });
-    }
-
-    const user = await verifyEmail(token);
-    return res
-      .status(200)
-      .json({ user, message: "Email verified successfully" });
-  } catch (error) {
-    return handleAuthError(error, res);
-  }
-}
+/* verifyEmailHandler removed */
 
 export async function loginHandler(
   req: Request,
@@ -206,6 +188,32 @@ export async function profileHandler(
     }
 
     return res.status(200).json({ user });
+  } catch (error) {
+    return handleAuthError(error, res);
+  }
+}
+
+export async function googleHandler(
+  req: Request,
+  res: Response,
+): Promise<Response> {
+  try {
+    const { idToken } = req.body;
+
+    if (!idToken) return res.status(400).json({ error: "idToken is required" });
+
+    const userAgent = req.get("user-agent") || "";
+    const ipAddress = req.ip || "0.0.0.0";
+
+    const result = await googleSignIn(
+      idToken,
+      "default",
+      "web",
+      userAgent,
+      ipAddress,
+    );
+
+    return res.status(200).json(result);
   } catch (error) {
     return handleAuthError(error, res);
   }

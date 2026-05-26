@@ -22,8 +22,11 @@ export const env = {
   ),
   refreshTokenExpiresIn: process.env.REFRESH_TOKEN_EXPIRES_IN ?? "30d",
   apiVersion: process.env.API_VERSION ?? "v1",
-  // Redis (Upstash) - optional for session storage / token blacklist
+  // Redis (Upstash) - only REST API configuration
   upstashRedisUrl: process.env.UPSTASH_REDIS_REST_URL,
-  upstashRedisToken: process.env.UPSTASH_REDIS_REST_TOKEN,
   redisUrl: process.env.REDIS_URL,
+  upstashRedisToken: process.env.UPSTASH_REDIS_REST_TOKEN,
+  // Optional direct Redis URL (e.g., docker://localhost:6379)
+  
+
 };

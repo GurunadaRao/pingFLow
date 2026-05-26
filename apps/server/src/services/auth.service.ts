@@ -42,53 +42,30 @@ export async function registerUser(
   email: string,
   password: string,
   displayName: string,
-): Promise<{ user: User; verificationToken: string }> {
+): Promise<{ user: User }> {
   const client = await pool.connect();
-
   try {
     await client.query("BEGIN");
-
     // Check if user exists
     const existingUser = await client.query(
       "SELECT id FROM users WHERE LOWER(email) = LOWER($1)",
       [email],
     );
-
     if (existingUser.rows.length > 0) {
       throw new Error("Email already registered");
     }
-
     // Hash password
     const passwordHash = await bcrypt.hash(password, 12);
-
-    // Insert user with pending_verification status
+    // Insert user as active and email verified
     const userResult = await client.query(
-      `INSERT INTO users (email, password_hash, display_name, account_status)
-       VALUES ($1, $2, $3, $4)
+      `INSERT INTO users (email, password_hash, display_name, account_status, email_verified)
+       VALUES ($1, $2, $3, $4, $5)
        RETURNING id, email, display_name, avatar_s3_key, about_text, account_status, email_verified, created_at, updated_at`,
-      [email, passwordHash, displayName, "pending_verification"],
+      [email, passwordHash, displayName, "active", true],
     );
-
     const user = userResult.rows[0];
-
-    // Generate verification token
-    const verificationToken = generateToken();
-    const tokenHash = hashToken(verificationToken);
-    const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000); // 24 hours
-
-    // Store token hash
-    await client.query(
-      `INSERT INTO email_verifications (user_id, token_hash, new_email, expires_at)
-       VALUES ($1, $2, $3, $4)`,
-      [user.id, tokenHash, email, expiresAt],
-    );
-
     await client.query("COMMIT");
-
-    return {
-      user,
-      verificationToken,
-    };
+    return { user };
   } catch (error) {
     await client.query("ROLLBACK");
     throw error;
@@ -101,52 +78,7 @@ export async function registerUser(
 // EMAIL VERIFICATION
 // ==========================================
 
-export async function verifyEmail(token: string): Promise<User> {
-  const client = await pool.connect();
-
-  try {
-    await client.query("BEGIN");
-
-    const tokenHash = hashToken(token);
-
-    // Find and validate token
-    const tokenResult = await client.query(
-      `SELECT user_id, new_email FROM email_verifications
-       WHERE token_hash = $1 AND used_at IS NULL AND expires_at > NOW()`,
-      [tokenHash],
-    );
-
-    if (tokenResult.rows.length === 0) {
-      throw new Error("Invalid or expired verification token");
-    }
-
-    const { user_id, new_email } = tokenResult.rows[0];
-
-    // Mark token as used
-    await client.query(
-      "UPDATE email_verifications SET used_at = NOW() WHERE token_hash = $1",
-      [tokenHash],
-    );
-
-    // Update user
-    const userResult = await client.query(
-      `UPDATE users 
-       SET email_verified = TRUE, account_status = 'active', email = $1, updated_at = NOW()
-       WHERE id = $2
-       RETURNING id, email, display_name, avatar_s3_key, about_text, account_status, email_verified, created_at, updated_at`,
-      [new_email, user_id],
-    );
-
-    await client.query("COMMIT");
-
-    return userResult.rows[0];
-  } catch (error) {
-    await client.query("ROLLBACK");
-    throw error;
-  } finally {
-    client.release();
-  }
-}
+/* verifyEmail function removed - email verification no longer required */
 
 // ==========================================
 // LOGIN
@@ -412,6 +344,95 @@ export async function getUserByEmail(email: string): Promise<User | null> {
   );
 
   return result.rows[0] || null;
+}
+
+// ==========================================
+// GOOGLE SIGN-IN
+// ==========================================
+
+export async function googleSignIn(
+  idToken: string,
+  deviceId: string,
+  platform: "ios" | "android" | "web" | "desktop",
+  userAgent: string,
+  ipAddress: string,
+): Promise<{ user: User; accessToken: string; refreshToken: string }> {
+  // Verify the ID token with Google's tokeninfo endpoint
+  const verifyUrl = `https://oauth2.googleapis.com/tokeninfo?id_token=${encodeURIComponent(
+    idToken,
+  )}`;
+
+  const resp = await fetch(verifyUrl);
+  if (!resp.ok) {
+    throw new Error("Invalid Google ID token");
+  }
+
+  const payload = (await resp.json()) as Record<string, any>;
+
+  const email = payload.email as string | undefined;
+  const name = payload.name as string | undefined;
+  const emailVerified =
+    payload.email_verified === "true" || payload.email_verified === true;
+
+  if (!email) throw new Error("Google token missing email");
+
+  // Find or create user
+  let user = await getUserByEmail(email);
+  const client = await pool.connect();
+  try {
+    if (!user) {
+      // Create a random password hash for OAuth-created users to satisfy NOT NULL constraint
+      const randomPassword = generateToken();
+      const passwordHash = await bcrypt.hash(randomPassword, 12);
+
+      const insertRes = await client.query(
+        `INSERT INTO users (email, password_hash, display_name, account_status, email_verified)
+         VALUES ($1, $2, $3, $4, $5)
+         RETURNING id, email, display_name, avatar_s3_key, about_text, account_status, email_verified, created_at, updated_at`,
+        [
+          email,
+          passwordHash,
+          name || email.split("@")[0],
+          "active",
+          emailVerified,
+        ],
+      );
+
+      user = insertRes.rows[0];
+    }
+
+    // Ensure user exists
+    if (!user) throw new Error("Failed to create or find user");
+
+    // Generate tokens
+    const accessToken = jwt.sign(
+      { sub: user.id, email: user.email, type: "access" },
+      process.env.JWT_SECRET!,
+      { expiresIn: "15m" },
+    );
+
+    const refreshToken = generateToken();
+    const refreshTokenHash = hashToken(refreshToken);
+    const refreshTokenExpires = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
+
+    await client.query(
+      `INSERT INTO refresh_tokens (user_id, token_hash, device_id, platform, user_agent, ip_address, expires_at, last_used_at)
+       VALUES ($1, $2, $3, $4, $5, $6::inet, $7, NOW())`,
+      [
+        user.id,
+        refreshTokenHash,
+        deviceId,
+        platform,
+        userAgent,
+        ipAddress,
+        refreshTokenExpires,
+      ],
+    );
+
+    return { user, accessToken, refreshToken };
+  } finally {
+    client.release();
+  }
 }
 
 // ==========================================

@@ -102,7 +102,7 @@ export function registerSocketHandlers(socket: AuthenticatedSocket) {
 
       io.to(`chat:${channelId}`).emit("typing_update", {
         channelId,
-        typing_users: typingUsers,
+        typing_users: typingUsers.map(name => ({ display_name: name })),
       });
     } catch (err) {
       console.error(`❌ Error in typing_start for user ${userId}:`, err);
@@ -120,7 +120,7 @@ export function registerSocketHandlers(socket: AuthenticatedSocket) {
 
       io.to(`chat:${channelId}`).emit("typing_update", {
         channelId,
-        typing_users: typingUsers,
+        typing_users: typingUsers.map(name => ({ display_name: name })),
       });
     } catch (err) {
       console.error(`❌ Error in typing_stop for user ${userId}:`, err);
